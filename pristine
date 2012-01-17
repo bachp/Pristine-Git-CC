@@ -1,6 +1,7 @@
 ###################################################
 #
 # (c) 2008 Alexander E Genaud
+# (c) 2012 Pascal Bach
 # 
 # This work as-is I provide.
 # No warranty express or implied.
@@ -16,7 +17,7 @@
 #
 ###################################################
 #
-# Pristine 0.9.3
+# Pristine 0.9.4
 #
 # Checks a that a Git repository and
 # ClearCase snapshot view sharing the
@@ -251,8 +252,8 @@ if [ $RUN_ARTIFACTS = "TRUE" ]; then
   
   GEN_K=`cat $DIR/gen_keep|wc -l`
   GEN_U=`cat $DIR/gen_unloaded|wc -l`
-
-  if [ $GEN_K$GEN_U != "00" ]; then
+  
+  if [ $GEN_K != "0" ] || [ $GEN_U != "0" ]; then
     echo FAILURE
     echo
     echo There exist untracked .keep, or .unloaded artifacts which 
@@ -293,7 +294,7 @@ if [ $RUN_GIT_STATUS = "TRUE" ]; then
   git ls-files --others | grep -v -f  $EXCLUDE > $DIR/git_untrack
   GIT_C=`cat $DIR/git_changes | wc -l`
   GIT_U=`cat $DIR/git_untrack | wc -l`
-  if [ $GIT_C$GIT_U != "00" ]; then
+  if [ $GIT_C != "0" ] || [ $GIT_U != "0" ]; then
     echo FAILURE
     echo
     echo Git does not consider the repository pristine
