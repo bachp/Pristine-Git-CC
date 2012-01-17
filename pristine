@@ -180,25 +180,20 @@ fi
 
 ###################################################
 #
-#
 # Clean up previous run. Create new directory using PID.
 # PID=$! is flaky in cygwin
 #
+rm -rf .git/pristine* .pristine*
 PID=`ps | grep ps | head -1 | sed "s/\W*\([0-9]*\).*/\1/"`
-
 if [ -d .git ]; then
-  rm -rf .git/pristine*
   DIR=.git/pristine.$PID
 else
-  rm -rf .pristine*
   DIR=.pristine.$PID
 fi
-
 mkdir $DIR
 
 
 ###################################################
-#
 #
 # Search the filesystem
 # for writable files
@@ -208,7 +203,17 @@ mkdir $DIR
 echo -n Checking writable...\ \ \ \ 
 if [ $RUN_WRITABLE = "TRUE" ]; then
 
-  find $DIR_LIST -type f -writable |\
+    #
+    # BUG FIX: alex 2008-08-07
+    #          -writable flag invalid on my linux box.
+    #          GNU find version 4.2.32
+    # 
+    #  was: find $DIR_LIST -type f -writable
+    #  now: find $DIR_LIST -type f -perm /220
+    #
+
+  find $DIR_LIST -type f -perm /220 |\
+    grep -v .git |\
     grep -v lost+found |\
     grep -v view.dat >\
     ${DIR}/gen_writable
@@ -249,8 +254,8 @@ fi
 echo -n Checking artifacts...\ \ \ 
 if [ $RUN_ARTIFACTS = "TRUE" ]; then
 
-  find $DIR_LIST -type f -name *keep > ${DIR}/gen_keep
-  find $DIR_LIST -type d -name *unloaded > ${DIR}/gen_unloaded
+  find $DIR_LIST -type f -name *.keep > ${DIR}/gen_keep
+  find $DIR_LIST -type d -name *.unloaded > ${DIR}/gen_unloaded
   
   GEN_K=`cat $DIR/gen_keep|wc -l`
   GEN_U=`cat $DIR/gen_unloaded|wc -l`
@@ -336,6 +341,7 @@ echo -n Checking CC Untrack...\ \
 if [ $RUN_CC_UNTRACK = "TRUE" ]; then
 
   cleartool ls -recurse -view -short $DIR_LIST |\
+      grep -v .git |\
       grep -v lost+found >\
       $DIR/cc_untrack
   CC_U=`cat $DIR/cc_untrack | wc -l`
