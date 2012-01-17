@@ -16,7 +16,7 @@
 #
 ###################################################
 #
-# Pristine 0.9.2
+# Pristine 0.9.3
 #
 # Checks a that a Git repository and
 # ClearCase snapshot view sharing the
@@ -53,21 +53,50 @@
 
 # default skip CC_CHECKOUTS
 FLAGS="-wagchu"
-MULTI_DIR_ARGS=FALSE
 USAGE_MSG="usage: `echo $0 | sed s:.*/::` [--help] [-[waguch]] [ dir... ]"
 
 
+###################################################
+#
+# climb down tree until repository root ~/.git/..
+# create a fresh 'pristine' dir in .git as $DIR
+# after appending gitignore to an exclude file
+#
+EXCLUDE=`pwd`/tmp.exclude
+echo .git/ > $EXCLUDE
+PREV_DIR=`pwd`
+while [ 1 -eq 1 ]; do
+  if [ `pwd` = "/" -o `pwd` = "\\" ]; then
+    echo FAILURE: not a valid repository
+    rm $EXCLUDE
+    cd $PREV_DIR
+    exit 1
+  elif [ -e .gitignore ]; then
+    cat .gitignore | grep -v "^#" >> $EXCLUDE
+  fi
+  if [ -d .git ]; then
+    if [ -e .git/info/exclude ]; then
+      cat .git/info/exclude | grep -v "^#" >> $EXCLUDE
+    fi
+    DIR=`pwd`/.git/pristine
+    rm -rf $DIR
+    mkdir $DIR
+    mv $EXCLUDE $DIR/exclude
+    EXCLUDE=$DIR/exclude
+    cd $PREV_DIR
+    break
+  fi
+  cd ..
+done
+
+
+###################################################
 #
 # separate the immediate child files from directories
 # of current working directory.
 # 
-if [ -e .gitignore ]; then
-  DIR_LIST="`ls -F|grep -v -f .gitignore|grep /|sed s:/\$::| sed s:\ :\?:g`"
-  FILE_LIST="`ls -F|grep -v -f .gitignore|grep -v /| sed s:\ :\?:g`"
-else
-  DIR_LIST="`ls -F|grep /|sed s:/\$::| sed s:\ :\?:g`"
-  FILE_LIST="`ls -F|grep -v /| sed s:\ :\?:g`"
-fi
+DIR_LIST="`ls -F|grep -v -f $EXCLUDE|grep /|sed s:/\$::| sed s:\ :\?:g`"
+FILE_LIST="`ls -F|grep -v -f $EXCLUDE|grep -v /| sed s:\ :\?:g`"
 
 
 ###################################################
@@ -109,6 +138,9 @@ else
   exit 127
 fi
 
+
+###################################################
+#
 # separate trailing directories from files
 # filter our redundancies
 
@@ -119,26 +151,23 @@ while [ $# -ge 1 ]; do
   echo ${NO_REPEAT}_d_ grep $TEMP
   if [ "x`echo ${NO_REPEAT}_d_ |grep $TEMP`" = "x${NO_REPEAT}_d_" ]; then
     TEMP=
-  elif [ -d "$1" -a -e .gitignore ]; then
-    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f .gitignore|\
-      sed s:/\$::| sed s:\ :_s_:g`"
-    DIR_LIST="$DIR_LIST `echo $1|grep -v -f .gitignore|\
-      sed s:/\$::| sed s:\ :\?:g`"
   elif [ -d "$1" ]; then
-    NO_REPEAT="${NO_REPEAT}_d_`echo $1|sed s:/\$::| sed s:\ :_s_:g`"
-    DIR_LIST="$DIR_LIST `echo $1| sed s:/\$::|sed s:\ :\?:g`"
-  elif [ -e "$1" -a -e .gitignore ]; then
-    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f .gitignore|\
-      sed s:\ :_s_:g`"
-    FILE_LIST="$FILE_LIST `echo $1|grep -v -f .gitignore|\
-      sed s:\ :\?:g`"
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f $EXCLUDE|\
+      sed s:/\$::| sed s:\ :_s_:g`"
+    DIR_LIST="$DIR_LIST `echo $1|grep -v -f $EXCLUDE|\
+      sed s:/\$::| sed s:\ :\?:g`"
   elif [ -e "$1" ]; then
-    NO_REPEAT="${NO_REPEAT}_d_`echo $1|sed s:\ :_s_:g`"
-    FILE_LIST="$FILE_LIST `echo $1|sed s:\ :\?:g`"
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f $EXCLUDE|\
+      sed s:\ :_s_:g`"
+    FILE_LIST="$FILE_LIST `echo $1|grep -v -f $EXCLUDE|\
+      sed s:\ :\?:g`"
   fi
   shift
 done
 
+
+###################################################
+#
 # Handle flags
 
 RUN_WRITABLE=FALSE
@@ -170,21 +199,6 @@ fi
 
 ###################################################
 #
-# Clean up previous run. Create new directory using PID.
-# PID=$! is flaky in cygwin
-#
-rm -rf .git/pristine* .pristine*
-PID=`ps | grep ps | head -1 | sed "s/\W*\([0-9]*\).*/\1/"`
-if [ -d .git ]; then
-  DIR=.git/pristine.$PID
-else
-  DIR=.pristine.$PID
-fi
-mkdir $DIR
-
-
-###################################################
-#
 # Search the filesystem
 # for writable files
 #    #grep -v $DIR |\
@@ -193,10 +207,8 @@ mkdir $DIR
 echo -n Checking \(-w\) Writable...\ \ \ \ 
 if [ $RUN_WRITABLE = "TRUE" ]; then
   find $FILE_LIST $DIR_LIST -type f -perm +220 |\
-    grep -v .git |\
-    grep -v lost+found |\
-    grep -v view.dat >\
-    ${DIR}/gen_writable
+      grep -v -f $EXCLUDE >\
+      ${DIR}/gen_writable
 
   if [ `cat $DIR/gen_writable | wc -l` != "0" ]; then
     echo FAILURE
@@ -278,12 +290,7 @@ echo -n Checking \(-g\) Git status...\ \
 if [ $RUN_GIT_STATUS = "TRUE" ]; then
 
   git diff --name-only HEAD $FILE_LIST $DIR_LIST > $DIR/git_changes
-  git ls-files --others |\
-      grep -v $DIR |\
-      grep -v .git |\
-      grep -v lost+found |\
-      grep -v view.dat >\
-      $DIR/git_untrack
+  git ls-files --others | grep -v -f  $EXCLUDE > $DIR/git_untrack
   GIT_C=`cat $DIR/git_changes | wc -l`
   GIT_U=`cat $DIR/git_untrack | wc -l`
   if [ $GIT_C$GIT_U != "00" ]; then
@@ -321,8 +328,7 @@ echo -n Checking \(-u\) CC Untrack...\ \
 if [ $RUN_CC_UNTRACK = "TRUE" ]; then
 
   cleartool ls -recurse -view -short $FILE_LIST $DIR_LIST |\
-      grep -v .git |\
-      grep -v lost+found >\
+      grep -v -f $EXCLUDE >\
       $DIR/cc_untrack
   CC_U=`cat $DIR/cc_untrack | wc -l`
 
