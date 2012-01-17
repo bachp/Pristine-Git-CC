@@ -16,7 +16,7 @@
 #
 ###################################################
 #
-# Pristine 0.9.0
+# Pristine 0.9.2
 #
 # Checks a that a Git repository and
 # ClearCase snapshot view sharing the
@@ -52,10 +52,22 @@
 # Default DIR_LIST icludes all child directories
 
 # default skip CC_CHECKOUTS
-DEFAULT_FLAGS="-wagchu"
+FLAGS="-wagchu"
 MULTI_DIR_ARGS=FALSE
-DIR_LIST=`ls -F|grep /|sed s:/\$::`
 USAGE_MSG="usage: `echo $0 | sed s:.*/::` [--help] [-[waguch]] [ dir... ]"
+
+
+#
+# separate the immediate child files from directories
+# of current working directory.
+# 
+if [ -e .gitignore ]; then
+  DIR_LIST="`ls -F|grep -v -f .gitignore|grep /|sed s:/\$::| sed s:\ :\?:g`"
+  FILE_LIST="`ls -F|grep -v -f .gitignore|grep -v /| sed s:\ :\?:g`"
+else
+  DIR_LIST="`ls -F|grep /|sed s:/\$::| sed s:\ :\?:g`"
+  FILE_LIST="`ls -F|grep -v /| sed s:\ :\?:g`"
+fi
 
 
 ###################################################
@@ -64,12 +76,12 @@ USAGE_MSG="usage: `echo $0 | sed s:.*/::` [--help] [-[waguch]] [ dir... ]"
 #
 
 if [ $# -eq 0 ]; then
-  FLAGS=$DEFAULT_FLAGS
-elif [ $1 = "--help" ]; then
+  TEMP=
+elif [ "$1" = "--help" ]; then
   echo $USAGE_MSG
   echo
   echo "   Flags: Check directories for..."
-  echo "       -w writable files \(possibly hijacked\)"
+  echo "       -w writable files (possibly hijacked)"
   echo "       -a artifacts such as *.keep and *.unloaded"
   echo "       -g Git status including untracked files"
   echo "       -u ClearCase untracked files and directories"
@@ -78,34 +90,54 @@ elif [ $1 = "--help" ]; then
   echo
   echo "   Note:"
   echo "       The flags above are ordered considering"
-  echo "       speed and likelihood of failure \(-w\) to the"
-  echo "       slower operations \(-ch\)."
+  echo "       speed and likelihood of failure (-w) to the"
+  echo "       slower operations (-ch)."
   echo
   echo "       The ClearCase checks may be slower than other"
   echo "       checks. -w is a reasonable substitute for -h"
-  echo "       although not technically the same \(a file may"
-  echo "       be readonly and still hijacked\)"
+  echo "       although not technically the same (a file may"
+  echo "       be readonly and still hijacked)"
   exit 0
-elif [ "x"`echo $1 | grep "^\-[waguch][waguch]*\$"` = "x"$1 ]; then
-  FLAGS=$1
-  if [ $# -gt 1 ]; then
-    if [ -d $2 ]; then
-      DIR_LIST=""
-      MULTI_DIR_ARGS=TRUE
-    else
-      echo $USAGE_MSG
-      exit 127
-    fi
-  fi
-elif [ -d $1 ]; then
-  FLAGS=$DEFAULT_FLAGS
-  DIR_LIST=`echo $1 | sed s:/\$::`
-  MULTI_DIR_ARGS=TRUE
+elif [ "x"`echo "$1" | grep "^\-[waguch][waguch]*\$"` = "x$1" ]; then
+  FLAGS="$1"
+  shift
+elif [ -e "$1" ]; then
+  DIR_LIST=
+  FILE_LIST=
 else
   echo $USAGE_MSG
   exit 127
 fi
 
+# separate trailing directories from files
+# filter our redundancies
+
+NO_REPEAT=
+while [ $# -ge 1 ]; do
+  TEMP=_d_`echo $1|sed s:/\$::|sed s:\ :_s_:g`_d_
+  echo arg: $1
+  echo ${NO_REPEAT}_d_ grep $TEMP
+  if [ "x`echo ${NO_REPEAT}_d_ |grep $TEMP`" = "x${NO_REPEAT}_d_" ]; then
+    TEMP=
+  elif [ -d "$1" -a -e .gitignore ]; then
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f .gitignore|\
+      sed s:/\$::| sed s:\ :_s_:g`"
+    DIR_LIST="$DIR_LIST `echo $1|grep -v -f .gitignore|\
+      sed s:/\$::| sed s:\ :\?:g`"
+  elif [ -d "$1" ]; then
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|sed s:/\$::| sed s:\ :_s_:g`"
+    DIR_LIST="$DIR_LIST `echo $1| sed s:/\$::|sed s:\ :\?:g`"
+  elif [ -e "$1" -a -e .gitignore ]; then
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|grep -v -f .gitignore|\
+      sed s:\ :_s_:g`"
+    FILE_LIST="$FILE_LIST `echo $1|grep -v -f .gitignore|\
+      sed s:\ :\?:g`"
+  elif [ -e "$1" ]; then
+    NO_REPEAT="${NO_REPEAT}_d_`echo $1|sed s:\ :_s_:g`"
+    FILE_LIST="$FILE_LIST `echo $1|sed s:\ :\?:g`"
+  fi
+  shift
+done
 
 # Handle flags
 
@@ -136,48 +168,6 @@ if [ "x"`echo $FLAGS | grep h` = "x"$FLAGS ]; then
 fi
 
 
-# Handle directory/module/component list
-
-if [ $MULTI_DIR_ARGS = "TRUE" ]; then
-  # for i in $#
-  # do
-  #   echo "Welcome $i times"
-  # done
-
-  if [ -d $2 ]; then
-    DIR_LIST="$DIR_LIST `echo $2 | sed s:/\$::`"
-  fi
-  if [ -d $3 ]; then
-    DIR_LIST="$DIR_LIST `echo $3 | sed s:/\$::`"
-  fi
-  if [ -d $4 ]; then
-    DIR_LIST="$DIR_LIST `echo $4 | sed s:/\$::`"
-  fi
-  if [ -d $5 ]; then
-    DIR_LIST="$DIR_LIST `echo $5 | sed s:/\$::`"
-  fi
-  if [ -d $6 ]; then
-    DIR_LIST="$DIR_LIST `echo $6 | sed s:/\$::`"
-  fi
-  if [ -d $7 ]; then
-    DIR_LIST="$DIR_LIST `echo $7 | sed s:/\$::`"
-  fi
-  if [ -d $8 ]; then
-    DIR_LIST="$DIR_LIST `echo $8 | sed s:/\$::`"
-  fi
-  if [ -d $9 ]; then
-    DIR_LIST="$DIR_LIST `echo $9 | sed s:/\$::`"
-  fi
-  if [ -d $10 ]; then
-    DIR_LIST="$DIR_LIST `echo $10 | sed s:/\$::`"
-  fi
-  if [ -d $11 ]; then
-    DIR_LIST="$DIR_LIST `echo $11 | sed s:/\$::`"
-  fi
-fi
-
-
-
 ###################################################
 #
 # Clean up previous run. Create new directory using PID.
@@ -200,19 +190,9 @@ mkdir $DIR
 #    #grep -v $DIR |\
 #    #grep -v .git |\
 #
-echo -n Checking writable...\ \ \ \ 
+echo -n Checking \(-w\) Writable...\ \ \ \ 
 if [ $RUN_WRITABLE = "TRUE" ]; then
-
-    #
-    # BUG FIX: alex 2008-08-07
-    #          -writable flag invalid on my linux box.
-    #          GNU find version 4.2.32
-    # 
-    #  was: find $DIR_LIST -type f -writable
-    #  now: find $DIR_LIST -type f -perm /220
-    #
-
-  find $DIR_LIST -type f -perm /220 |\
+  find $FILE_LIST $DIR_LIST -type f -perm +220 |\
     grep -v .git |\
     grep -v lost+found |\
     grep -v view.dat >\
@@ -251,10 +231,10 @@ fi
 # specific extensions:
 #   .keep and .unloaded
 #
-echo -n Checking artifacts...\ \ \ 
+echo -n Checking \(-a\) Artifacts...\ \ \ 
 if [ $RUN_ARTIFACTS = "TRUE" ]; then
 
-  find $DIR_LIST -type f -name *.keep > ${DIR}/gen_keep
+  find $FILE_LIST $DIR_LIST -type f -name *.keep > ${DIR}/gen_keep
   find $DIR_LIST -type d -name *.unloaded > ${DIR}/gen_unloaded
   
   GEN_K=`cat $DIR/gen_keep|wc -l`
@@ -294,10 +274,10 @@ fi
 # a commit or sees
 # unexpected files
 #
-echo -n Checking Git status...\ \ 
+echo -n Checking \(-g\) Git status...\ \ 
 if [ $RUN_GIT_STATUS = "TRUE" ]; then
 
-  git diff --name-only HEAD $DIR_LIST > $DIR/git_changes
+  git diff --name-only HEAD $FILE_LIST $DIR_LIST > $DIR/git_changes
   git ls-files --others |\
       grep -v $DIR |\
       grep -v .git |\
@@ -337,10 +317,10 @@ fi
 # Check for any files ClearCase
 # considers untracked
 #
-echo -n Checking CC Untrack...\ \ 
+echo -n Checking \(-u\) CC Untrack...\ \ 
 if [ $RUN_CC_UNTRACK = "TRUE" ]; then
 
-  cleartool ls -recurse -view -short $DIR_LIST |\
+  cleartool ls -recurse -view -short $FILE_LIST $DIR_LIST |\
       grep -v .git |\
       grep -v lost+found >\
       $DIR/cc_untrack
@@ -374,10 +354,10 @@ fi
 # Check for any ClearCase checkouts
 # that need to be checked in or cancelled.
 #
-echo -n Checking CC Checkouts...
+echo -n Checking \(-c\) CC Checkouts...
 if [ $RUN_CC_CHECKOUTS = "TRUE" ]; then
 
-  cleartool lsco -me -recurse -short $DIR_LIST >\
+  cleartool lsco -me -recurse -short $FILE_LIST $DIR_LIST >\
       $DIR/cc_checkout
 
   if [ `cat $DIR/cc_checkout | wc -l` != "0" ]; then
@@ -410,10 +390,10 @@ fi
 # Check for any files ClearCase
 # considers hijacked files and directories
 #
-echo -n Checking CC Hijacks...\ \ 
+echo -n Checking \(-h\) CC Hijacks...\ \ 
 if [ $RUN_CC_HIJACKS = "TRUE" ]; then
 
-  cleartool ls -recurse $DIR_LIST |\
+  cleartool ls -recurse $FILE_LIST $DIR_LIST |\
       grep "\[hijacked\]" >\
       $DIR/cc_hijack
   CC_H=`cat $DIR/cc_hijack | wc -l`
